@@ -1,0 +1,202 @@
+[
+    {
+        "id": "6ec9f89a066a6aad",
+        "type": "tab",
+        "label": "Flow 1",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "a69bfe8f450be3f9",
+        "type": "comment",
+        "z": "6ec9f89a066a6aad",
+        "name": "WARNING: please check you have started this container with a volume that is mounted to /data\\n otherwise any flow changes are lost when you redeploy or upgrade the container\\n (e.g. upgrade to a more recent node-red docker image).\\n  If you are using named volumes you can ignore this warning.\\n Double click or see info side panel to learn how to start Node-RED in Docker to save your work",
+        "info": "\nTo start docker with a bind mount volume (-v option), for example:\n\n```\ndocker run -it -p 1880:1880 -v /home/user/node_red_data:/data --name mynodered nodered/node-red\n```\n\nwhere `/home/user/node_red_data` is a directory on your host machine where you want to store your flows.\n\nIf you do not do this then you can experiment and redploy flows, but if you restart or upgrade the container the flows will be disconnected and lost. \n\nThey will still exist in a hidden data volume, which can be recovered using standard docker techniques, but that is much more complex than just starting with a named volume as described above.",
+        "x": 350,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "d4083c317f0f481c",
+        "type": "amqp-in",
+        "z": "6ec9f89a066a6aad",
+        "name": "",
+        "broker": "c4ac40bc97a1db43",
+        "prefetch": 0,
+        "noAck": false,
+        "exchangeName": "",
+        "exchangeType": "topic",
+        "exchangeRoutingKey": "alerts",
+        "exchangeDurable": true,
+        "queueName": "alerts",
+        "queueExclusive": false,
+        "queueDurable": true,
+        "queueAutoDelete": false,
+        "headers": "{}",
+        "x": 370,
+        "y": 460,
+        "wires": [
+            [
+                "18ad8adff09722b8"
+            ]
+        ]
+    },
+    {
+        "id": "18ad8adff09722b8",
+        "type": "json",
+        "z": "6ec9f89a066a6aad",
+        "name": "",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 610,
+        "y": 460,
+        "wires": [
+            [
+                "ce87d39c4f2bfbbe"
+            ]
+        ]
+    },
+    {
+        "id": "ce87d39c4f2bfbbe",
+        "type": "function",
+        "z": "6ec9f89a066a6aad",
+        "name": "function 1",
+        "func": "let alert;\ntry {\n    alert = (typeof msg.payload === \"string\")\n        ? JSON.parse(msg.payload)\n        : msg.payload;\n} catch (e) {\n    alert = { raw: msg.payload };\n}\n\nconst symbol = (alert.symbol || \"unknown\").toLowerCase();\nconst ts = Date.now();\nconst rnd = Math.floor(Math.random() * 1e6);\n\nconst tsnew = (alert.timestamp_utc || new Date().toISOString()).replace(/[:.]/g, \"-\");\n\nconst jsonText = JSON.stringify(alert);\nconst buf = Buffer.from(jsonText, \"utf8\");\n\nmsg.bucket = \"alertsnode\";\n//msg.object = `alerts/${symbol}/${tsnew}_${Math.floor(Math.random() * 1e6)}.json`; \nmsg.object = `alerts/${symbol}/${tsnew}.json`;\nmsg.objectName = msg.object;\nmsg.stream = buf;\nmsg.size = buf.length;\nmsg.metaData = {\n    \"Content-Type\": \"application/json\"\n};\n\n// --- (Flattening metrics) ---\nconst coin = symbol.toUpperCase();\nconst priceKey = `${coin}_price`;\n\nmsg.payload = {\n    symbol: coin,\n    [priceKey]: alert.metrics ? alert.metrics.price : null,\n    event_type: alert.event_type,\n    message: alert.message,\n    timestamp_utc: alert.timestamp_utc\n};\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 880,
+        "y": 460,
+        "wires": [
+            [
+                "28642da42f42f25a",
+                "4482d67113c75379",
+                "b2757483b95f543e"
+            ]
+        ]
+    },
+    {
+        "id": "28642da42f42f25a",
+        "type": "debug",
+        "z": "6ec9f89a066a6aad",
+        "name": "debug 2",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1280,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "4482d67113c75379",
+        "type": "objects",
+        "z": "6ec9f89a066a6aad",
+        "objects_name": "Put_data_Minio",
+        "host": "945cbc3f86430633",
+        "objects_operation": "putObject",
+        "objects_bucket": "alerts",
+        "objects_object": "msg.objectName",
+        "objects_offset": "",
+        "objects_length": "",
+        "objects_stream": "",
+        "objects_size": "",
+        "objects_metadata": "",
+        "objects_sourceobject": "",
+        "objects_conditions": "",
+        "objects_objectslist": [],
+        "objects_prefix": "",
+        "objects_etag": "",
+        "objects_datetime": "",
+        "x": 1300,
+        "y": 360,
+        "wires": [
+            [],
+            []
+        ]
+    },
+    {
+        "id": "b2757483b95f543e",
+        "type": "mqtt out",
+        "z": "6ec9f89a066a6aad",
+        "name": "",
+        "topic": "v1/devices/me/telemetry",
+        "qos": "0",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "b9fd2042813d07d9",
+        "x": 1310,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "c4ac40bc97a1db43",
+        "type": "amqp-broker",
+        "name": "",
+        "host": "rabbitmq",
+        "port": "5672",
+        "vhost": "",
+        "tls": false,
+        "credsFromSettings": false
+    },
+    {
+        "id": "945cbc3f86430633",
+        "type": "minio-config",
+        "name": "MinIO Instance",
+        "host": "minio",
+        "port": "9000",
+        "useSsl": false
+    },
+    {
+        "id": "b9fd2042813d07d9",
+        "type": "mqtt-broker",
+        "name": "",
+        "broker": "thingsboard",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": 4,
+        "keepalive": 60,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "28b5e32cf848c796",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "@meowwolf/node-red-contrib-amqp": "2.4.2",
+            "node-red-contrib-minio-all": "0.0.6"
+        }
+    }
+]

@@ -1,0 +1,108 @@
+version: "3.9"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5  
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    volumes:
+      - minio_data:/data
+
+  nodered:
+    build:
+      context: .
+      dockerfile: Dockerfile.nodered
+    container_name: nodered
+    environment:
+      - FLOWS=flows.json # Επιβάλλει στο Node-RED να διαβάσει το αρχείο που έκανες COPY
+    ports:
+      - "1880:1880"
+    volumes:
+      - nodered_data:/data
+    depends_on:
+      - rabbitmq
+      - minio
+
+  # Το API σου που τρέχει τον Flask κώδικα
+  analytics-api:
+    build: . # Υποθέτοντας ότι έχεις ένα Dockerfile στον ίδιο φάκελο
+    image: tasos-sotiriou91/crypto-pipeline-app-v2:latest
+    container_name: analytics_api
+    volumes:
+      - .:/app  # Αυτό συνδέει τον τρέχοντα φάκελο με το /app του container
+    ports:
+      - "5001:5001"
+    command: python analytics_service.py # <--- Εδώ ορίζεις το script του API
+    depends_on:
+      - minio
+    environment:
+      MINIO_ENDPOINT: minio:9000
+
+  binance-connector:
+    build: .
+    image: tasos-sotiriou91/crypto-pipeline-app-v2:latest
+    container_name: binance_connector
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python connect_binnance.py # <--- Εδώ ορίζεις το script του WebSocket
+    depends_on:
+      rabbitmq:
+        condition: service_healthy # Περιμένει να περάσει το healthcheck
+      minio:
+        condition: service_started
+
+  postgres:
+    image: postgres:15
+    container_name: tb_postgres
+    environment:
+      POSTGRES_USER: tb_user
+      POSTGRES_PASSWORD: tb_pass
+      POSTGRES_DB: thingsboard
+    volumes:
+      - tb_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  thingsboard:
+    image: thingsboard/tb-postgres:latest
+    container_name: thingsboard
+    environment:
+      TB_INSTALL_STATIC_DATA: "false"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tb_postgres:5432/thingsboard
+      SPRING_DATASOURCE_USERNAME: tb_user
+      SPRING_DATASOURCE_PASSWORD: tb_pass
+    depends_on:
+      - postgres
+    ports:
+      - "8080:9090"
+      - "1883:1883"
+
+volumes:
+  rabbitmq_data:
+  minio_data:
+  nodered_data:
+  tb_postgres_data:

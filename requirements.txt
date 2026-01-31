@@ -1,0 +1,10 @@
+pika
+requests
+websocket
+streamlit
+pandas
+plotly
+minio
+streamlit_autorefresh
+flask
+urllib3
