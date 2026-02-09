@@ -83,9 +83,14 @@ services:
       POSTGRES_PASSWORD: tb_pass
       POSTGRES_DB: thingsboard
     volumes:
-      - tb_postgres_data:/var/lib/postgresql/data
+      - tb_postgres_data_new:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tb_user -d thingsboard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5  
 
   thingsboard:
     image: thingsboard/tb-postgres:latest
@@ -96,7 +101,8 @@ services:
       SPRING_DATASOURCE_USERNAME: tb_user
       SPRING_DATASOURCE_PASSWORD: tb_pass
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy # Περιμένει τη βάση να είναι 100% έτοιμη
     ports:
       - "8080:9090"
       - "1883:1883"
@@ -105,4 +111,4 @@ volumes:
   rabbitmq_data:
   minio_data:
   nodered_data:
-  tb_postgres_data:
+  tb_postgres_data_new:

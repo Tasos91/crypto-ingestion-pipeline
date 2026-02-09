@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request, make_response
 from minio import Minio
-import json
+import json, io
 from functools import wraps
 
 app = Flask(__name__)
@@ -24,24 +24,34 @@ def auth_required(f):
 @auth_required
 def calculate_prediction(symbol):
     try:
+        # 1. Διάβασμα παραμέτρου από το URL (π.χ. ?limit=1000). Default το 20.
+        limit = request.args.get('limit', default=20, type=int)
+        
         bucket = "rawdata"
         prefix = f"raw_data/{symbol}/"
         objects = list(client.list_objects(bucket, prefix=prefix, recursive=True))
         
-        if len(objects) < 21:
-            return jsonify({"error": "Not enough data yet", "samples": len(objects)}), 400
+        total_found = len(objects)
+        if total_found < 2:
+            return jsonify({"error": "Not enough data to calculate even a simple trend", "samples": total_found}), 400
 
-        # 2. Παίρνουμε τα προηγούμενα 20 κεριά
-        history_objects = objects[-21:-1]
+        # 2. ΠΡΟΣΑΡΜΟΓΗ: Αν ο χρήστης ζητήσει 1000 αλλά έχουμε 32, παίρνουμε τα 32.
+        # Αν έχουμε 5000, παίρνουμε τα τελευταία 1000.
+        actual_limit = min(limit, total_found)
+        
+        # Παίρνουμε τα αντικείμενα για το "παρελθόν" (όλα εκτός από το τελευταίο)
+        history_objects = objects[-(actual_limit):-1]
+        
         prices = []
         for obj in history_objects:
             data = client.get_object(bucket, obj.object_name)
             content = json.loads(data.read().decode())
             prices.append(float(content['price']))
         
+        # Υπολογισμός Μέσου Όρου με βάση το δυναμικό πλήθος δειγμάτων
         avg_price = sum(prices) / len(prices)
 
-        # 3. Παίρνουμε το ΤΕΛΕΥΤΑΙΟ κερί
+        # 3. Παίρνουμε το ΤΕΛΕΥΤΑΙΟ κερί για σύγκριση
         current_obj = objects[-1]
         current_data = client.get_object(bucket, current_obj.object_name)
         current_content = json.loads(current_data.read().decode())
@@ -53,12 +63,61 @@ def calculate_prediction(symbol):
 
         return jsonify({
             "symbol": symbol,
+            "requested_limit": limit,
+            "actual_samples_used": len(prices),
             "current_price": current_price,
-            "moving_avg_20": round(avg_price, 2),
+            "moving_avg": round(avg_price, 2),
             "deviation_pct": round(diff_pct, 4),
             "is_anomaly": bool(is_outlier),
-            "suggested_threshold": round(avg_price * 1.005, 2)
+            "status": "Success using available data" if actual_limit < limit else "Full limit reached"
         })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+    
+@app.route('/set-thresholds', methods=['POST'])
+@auth_required
+def set_thresholds():
+    try:
+        # 1. Λήψη δεδομένων από το JSON body του request
+        data = request.get_json()
+        
+        # Αναμενόμενο format: 
+        # {
+        #   "btcusdt": {"min": 93000.0, "max": 94000.0},
+        #   "ethusdt": {"min": 3300.0, "max": 3400.0}
+        # }
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        bucket_name = "thresholds" # Το bucket που θα περιέχει τα configs
+        object_name = "config.json" # Το αρχείο μέσα στο bucket
+
+        # 2. Έλεγχος αν υπάρχει το bucket, αλλιώς δημιουργία
+        if not client.bucket_exists(bucket_name):
+            client.make_bucket(bucket_name)
+            print(f"Bucket {bucket_name} created.")
+
+        # 3. Μετατροπή του dict σε bytes για το MinIO
+        json_data = json.dumps(data).encode('utf-8')
+        data_stream = io.BytesIO(json_data)
+
+        # 4. Ανέβασμα του αρχείου (Overwrite το παλιό αν υπάρχει)
+        client.put_object(
+            bucket_name,
+            object_name,
+            data_stream,
+            length=len(json_data),
+            content_type='application/json'
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "Thresholds updated in MinIO",
+            "path": f"{bucket_name}/{object_name}",
+            "data": data
+        }), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
