@@ -127,10 +127,6 @@ def check_rules(symbol, o, c, v):
 
     # 2. Αποθήκευση Raw Data στο Minio
     save_raw_data_to_minio(raw_data_obj, minio_client)
-    
-    # 3. Αποστολή Raw Data στο RabbitMQ (για να βλέπεις κάτι στο Node-RED ακόμα και χωρίς alert)
-    # ΠΡΟΣΟΧΗ: Αν θες να βλέπεις την τιμή live στο Node-RED, ξε-σχολίασε την παρακάτω γραμμή:
-    publish_to_rabbitmq(raw_data_obj) 
 
     # 4. Λήψη Δυναμικών Thresholds
     live_cfg = get_live_thresholds()
