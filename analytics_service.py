@@ -4,7 +4,7 @@ import json, io
 from functools import wraps
 
 app = Flask(__name__)
-client = Minio("172.17.0.1:9000", "minio", "minio123", secure=False)
+client = Minio("minio:9000", "minio", "minio123", secure=False)
 
 # Οι κωδικοί πρόσβασης
 USER_DATA = {

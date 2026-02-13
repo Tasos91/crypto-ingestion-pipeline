@@ -16,10 +16,10 @@ SYMBOLS = ["btcusdt", "ethusdt"]  # lowercase
 INTERVAL = "1m"
 
 # Default Thresholds (Fallback)
-PRICE_THRESHOLDS = {
-    "btcusdt": (93099.18, 93100.18),
-    "ethusdt": (3317.88, 3320.88),
-}
+# PRICE_THRESHOLDS = {
+#     "btcusdt": (93099.18, 93100.18),
+#     "ethusdt": (3317.88, 3320.88),
+# }
 
 PCT_MOVE_THRESHOLD = 0.7  
 VOLUME_SPIKE_MULT = 3.0   

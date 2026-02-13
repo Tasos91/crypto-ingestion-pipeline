@@ -47,33 +47,30 @@ services:
       - minio
 
   # Το API σου που τρέχει τον Flask κώδικα
+  binance-connector:
+    image: tasos-sotiriou91/crypto-pipeline-app-v2:latest
+    container_name: binance_connector
+    volumes:
+      - .:/app  # <--- ΑΥΤΟ ΕΔΩ: Λέει στο Docker να χρησιμοποιήσει τα αρχεία από το φάκελό σου
+    working_dir: /app
+    command: python connect_binnance.py
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
   analytics-api:
-    build: . # Υποθέτοντας ότι έχεις ένα Dockerfile στον ίδιο φάκελο
     image: tasos-sotiriou91/crypto-pipeline-app-v2:latest
     container_name: analytics_api
     volumes:
-      - .:/app  # Αυτό συνδέει τον τρέχοντα φάκελο με το /app του container
+      - .:/app  # <--- Κι εδώ το ίδιο, για να τρέχει το δικό σου analytics_service.py
+    working_dir: /app
     ports:
       - "5001:5001"
-    command: python analytics_service.py # <--- Εδώ ορίζεις το script του API
+    command: python analytics_service.py
     depends_on:
       - minio
-    environment:
-      MINIO_ENDPOINT: minio:9000
-
-  binance-connector:
-    build: .
-    image: tasos-sotiriou91/crypto-pipeline-app-v2:latest
-    container_name: binance_connector
-    restart: always
-    environment:
-      - PYTHONUNBUFFERED=1
-    command: python connect_binnance.py # <--- Εδώ ορίζεις το script του WebSocket
-    depends_on:
-      rabbitmq:
-        condition: service_healthy # Περιμένει να περάσει το healthcheck
-      minio:
-        condition: service_started
 
   postgres:
     image: postgres:15
